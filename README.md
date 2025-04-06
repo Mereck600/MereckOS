@@ -17,3 +17,5 @@ run this together to simply run the below code
 ``` make && qemu-system-i386 -fda build/main_floppy.img ```
 
 
+# Explanation:
+Bootloader starts off as a floppy disk for ease of use, universal support across vms and FAT12 because its simple 
