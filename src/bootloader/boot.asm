@@ -33,6 +33,7 @@ bdb_dir_entries_count: dw 0E0h
 bdb_total_sectors: dw 2880  ; 288-*512 =1.44mb
 bdb_media_descriptor_type: db 0F0h ; F0 = 3.5*floppy disk
 bdb_sectors_per_fat: dw 9 ;9 sectors/fat
+bdb_sectors_per_track: dw 18
 bdb_heads: 	dw 2
 bdb_hidden_sectors: dd 0
 bdb_large_sector_count: dd 0
@@ -93,14 +94,154 @@ main:
 	mov sp, 0x7c00 ;stack grows downwards in memory fifo push pop sp=stackpointe
 
 
+	;read something from floppy disk
+	; BIOS SHOULD SET drive number to dl
+	mov [ebr_drive_number],dl
+	mov ax,1 ;lba=1 second sector from disk
+	mov cl,1 ; 1 sector to read
+	mov bx,0x7E00 ; data should be after the bootloader
+	call disk_read
+
+
 	;print message
 	mov si,msg_hello
 	call puts
 	
+	cli
 	hlt
+;.halt:
+;	JMP .halt ;so that we dont hit infinite loop 
+
+
+
+;
+;Disk routines
+;
+;
+; converts an LBA address to a CHS address
+; parameters:
+; -ax: LBA address
+; returns
+;	- cx (bits 0-55): sectors number
+;	- cx (bits 6-15): cylinder
+;	- dh: head
+
+
+;
+;Error handlers
+;
+floppy_error:
+	mov si, msg_read_failed
+	call puts
+	jmp wait_key_and_reboot
+	
+
+wait_key_and_reboot:
+	mov ah, 0
+	int 16h ;wait for key press
+	jmp 0FFFFh:0 ;jump to begining of BIOS, should reboot 
+		
 .halt:
-	JMP .halt ;so that we dont hit infinite loop 
+	cli ;disable interupts so we cant get out of halt state
+	hlt ; hope this works 
+
+lba_to_chs:
+	push ax
+	push dx
+	xor dx,dx ;dx =0
+	div word [bdb_sectors_per_track] ; ax = lba /sectorspertrack
+									; dx = lba % sectorsPerTrack
+
+	inc dx ; dx = lba % sectors per track +1 = sector 
+	xor dx,dx ;dx=0
+	div word [bdb_heads] ; ax = [lba /sectorsPerTrack ]/heas = cylinders
+							; dx =[lba/sectorspertrack]%heads = headv
+	mov dh,dl ; dh=head
+	mov ch,al ; ch = cylinder (lower 8 bits)
+	shl ah, 6 
+	or cl,ah ;put upper 2 bits of cylinder in cl
+
+	pop ax
+	mov dl, al
+	pop ax
+	ret
+
+
+;
+;reads form a disk
+;
+; parameters:
+; ax: lba address
+; cl: number of sectors to read up to 128
+; dl: drive number
+; es:bx memory address where to store read data
+
+disk_read:
+	push ax ;save registers we will modify
+	push bx
+	push cx
+	push di
+
+	push cx ; temp save cl number of secotrs to read
+	call lba_to_chs
+	pop ax
+	
+	mov ah, 02h
+	mov di, 3
+
+; in real life need to loop 3 times cus floppys are ass
+
+.retry:
+	pusha ; save all regs we dont know what bios modifies
+	stc ;set carry flag some bios dont set it 
+	int 13h ; carry flag cleared = success
+	jnc .done ; jump if carry not set 
+
+	;read failed
+	popa
+	call disk_reset
+
+	dec di
+	test di,di
+	jnz .retry
+
+.fail:
+	; all attempsts failes
+	jmp floppy_error
+
+.done:
+	popa
+
+	pop di ;restoe registers we will modify
+	pop dx
+	pop cx
+	pop bx
+	pop ax
+	ret 
+
+;
+;resets disk controller
+;parametersL
+;	dl :drive number
+;
+disk_reset:
+	pusha
+	mov ah, 0
+	stc
+	int 13h
+	jc floppy_error
+	popa
+	ret
+
+	
+
+
+
+
+
+
 
 msg_hello: db  'Hello World!',ENDL,0
+msg_read_failed: db 'Read from disk failed!', ENDL, 0
 times 510-($-$$) db 0
 dw 0AA55h

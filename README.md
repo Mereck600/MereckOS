@@ -8,6 +8,7 @@ This is a work in progress simple OS
 - QEMU 
 - MAKE
 - mtools
+- bochs
 
 # Currently working on the bootloader
 - Uses floppy disk as bootloader
