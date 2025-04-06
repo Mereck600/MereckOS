@@ -1,247 +1,230 @@
-org 0x7c00 ;this is the address where the bios puts the os 
-;Directive give a clue to the assembler that will affect how the program gets compiled
-;instruction translated to machine code that the cpu will execute
-bits 16 ; emit 16bit code so it can be backwards compatible start on 16 bit and can move up to 64
-;refrencing a mem location
-;segment:[base +index *scale(num constants only in 32/64 bit modes 1,2,4,8)+displacement(any int const)]
-;var; dw 100
-; move ax,var ;cpoy offset to ax
-; mov ax, [var] ;copy memory contents
+org 0x7C00
+bits 16
 
-;;array 3rd elm
-;array: dw 100,200,300
-; mov bx, array ;copy offset to ax
-; mov si,2*2 ;array[2], words are 2 bytes wide
-; mov ax, [bx+si] ; copy memory contents
 
-%define ENDL 0x0D,0x0A ;setting macro for endline 
-
+%define ENDL 0x0D, 0x0A
 
 
 ;
 ; FAT12 header
-;
+; 
 jmp short start
 nop
 
-bdb_oem:	db 'MSWIN4.1' ;8 bytes
-bdb_bytes_per_sector: dw 512
-bdb_sectors_per_cluster: db 1
-bdb_reserved_sectors: dw 1
-bdb_fat_count:	db 2
-bdb_dir_entries_count: dw 0E0h 
-bdb_total_sectors: dw 2880  ; 288-*512 =1.44mb
-bdb_media_descriptor_type: db 0F0h ; F0 = 3.5*floppy disk
-bdb_sectors_per_fat: dw 9 ;9 sectors/fat
-bdb_sectors_per_track: dw 18
-bdb_heads: 	dw 2
-bdb_hidden_sectors: dd 0
-bdb_large_sector_count: dd 0
+bdb_oem:                    db 'MSWIN4.1'           ; 8 bytes
+bdb_bytes_per_sector:       dw 512
+bdb_sectors_per_cluster:    db 1
+bdb_reserved_sectors:       dw 1
+bdb_fat_count:              db 2
+bdb_dir_entries_count:      dw 0E0h
+bdb_total_sectors:          dw 2880                 ; 2880 * 512 = 1.44MB
+bdb_media_descriptor_type:  db 0F0h                 ; F0 = 3.5" floppy disk
+bdb_sectors_per_fat:        dw 9                    ; 9 sectors/fat
+bdb_sectors_per_track:      dw 18
+bdb_heads:                  dw 2
+bdb_hidden_sectors:         dd 0
+bdb_large_sector_count:     dd 0
 
-; extended boot sector
-ebr_drive_number: 	db 0
-					db 0 ;reserved
-ebr_signature: 		db 29h 
-ebr_volume_id:		db 12h, 34h, 56h, 78h ;serial num
-ebr_volume_label: 	db 'MERECK OS O' ;;11 bytes padded with spaces
+; extended boot record
+ebr_drive_number:           db 0                    ; 0x00 floppy, 0x80 hdd, useless
+                            db 0                    ; reserved
+ebr_signature:              db 29h
+ebr_volume_id:              db 12h, 34h, 56h, 78h   ; serial number, value doesn't matter
+ebr_volume_label:           db 'NANOBYTE OS'        ; 11 bytes, padded with spaces
+ebr_system_id:              db 'FAT12   '           ; 8 bytes
 
-
+;
+; Code goes here
+;
 
 start:
-	jmp main ;since func above main we need to jump to main
+    jmp main
 
-;prints a string to the screen
+
+;
+; Prints a string to the screen
 ; Params:
-;	- ds:si points to a string prints until a null char
-
+;   - ds:si points to string
+;
 puts:
-	;save registers we will modify
-	push si
-	push ax
+    ; save registers we will modify
+    push si
+    push ax
+    push bx
 
 .loop:
-	lodsb 		 ;loads the next character in al
-	or al,al ;verify if next char is null 
-	jz .done
-	
+    lodsb               ; loads next character in al
+    or al, al           ; verify if next character is null?
+    jz .done
 
-	mov ah,0x0e ; moves from source to destination
-	mov bh,0
-	int 0x10
-	jmp .loop	
-; interupts are a signal wich makes the processor stop to handle sig
-; can be triggerd by exception
-; or hardware
-;or software 0-255 using INT 10h --video 
+    mov ah, 0x0E        ; call bios interrupt
+    mov bh, 0           ; set page number to 0
+    int 0x10
 
+    jmp .loop
 
 .done:
-	pop ax
-	pop si
-	ret ;return
-
-
+    pop bx
+    pop ax
+    pop si    
+    ret
+    
 
 main:
+    ; setup data segments
+    mov ax, 0                   ; can't set ds/es directly
+    mov ds, ax
+    mov es, ax
+    
+    ; setup stack
+    mov ss, ax
+    mov sp, 0x7C00              ; stack grows downwards from where we are loaded in memory
 
-	;setup data segments
-	mov ax, 0
-	mov ds, ax
-	mov es,ax
+    ; read something from floppy disk
+    ; BIOS should set DL to drive number
+    mov [ebr_drive_number], dl
 
-	;setup stack
-	mov ss, ax
-	mov sp, 0x7c00 ;stack grows downwards in memory fifo push pop sp=stackpointe
+    mov ax, 1                   ; LBA=1, second sector from disk
+    mov cl, 1                   ; 1 sector to read
+    mov bx, 0x7E00              ; data should be after the bootloader
+    call disk_read
 
+    ; print hello world message
+    mov si, msg_hello
+    call puts
 
-	;read something from floppy disk
-	; BIOS SHOULD SET drive number to dl
-	mov [ebr_drive_number],dl
-	mov ax,1 ;lba=1 second sector from disk
-	mov cl,1 ; 1 sector to read
-	mov bx,0x7E00 ; data should be after the bootloader
-	call disk_read
-
-
-	;print message
-	mov si,msg_hello
-	call puts
-	
-	cli
-	hlt
-;.halt:
-;	JMP .halt ;so that we dont hit infinite loop 
-
+    cli                         ; disable interrupts, this way CPU can't get out of "halt" state
+    hlt
 
 
 ;
-;Disk routines
+; Error handlers
 ;
-;
-; converts an LBA address to a CHS address
-; parameters:
-; -ax: LBA address
-; returns
-;	- cx (bits 0-55): sectors number
-;	- cx (bits 6-15): cylinder
-;	- dh: head
 
-
-;
-;Error handlers
-;
 floppy_error:
-	mov si, msg_read_failed
-	call puts
-	jmp wait_key_and_reboot
-	
+    mov si, msg_read_failed
+    call puts
+    jmp wait_key_and_reboot
 
 wait_key_and_reboot:
-	mov ah, 0
-	int 16h ;wait for key press
-	jmp 0FFFFh:0 ;jump to begining of BIOS, should reboot 
-		
+    mov ah, 0
+    int 16h                     ; wait for keypress
+    jmp 0FFFFh:0                ; jump to beginning of BIOS, should reboot
+
 .halt:
-	cli ;disable interupts so we cant get out of halt state
-	hlt ; hope this works 
+    cli                         ; disable interrupts, this way CPU can't get out of "halt" state
+    hlt
+
+
+;
+; Disk routines
+;
+
+;
+; Converts an LBA address to a CHS address
+; Parameters:
+;   - ax: LBA address
+; Returns:
+;   - cx [bits 0-5]: sector number
+;   - cx [bits 6-15]: cylinder
+;   - dh: head
+;
 
 lba_to_chs:
-	push ax
-	push dx
-	xor dx,dx ;dx =0
-	div word [bdb_sectors_per_track] ; ax = lba /sectorspertrack
-									; dx = lba % sectorsPerTrack
 
-	inc dx ; dx = lba % sectors per track +1 = sector 
-	xor dx,dx ;dx=0
-	div word [bdb_heads] ; ax = [lba /sectorsPerTrack ]/heas = cylinders
-							; dx =[lba/sectorspertrack]%heads = headv
-	mov dh,dl ; dh=head
-	mov ch,al ; ch = cylinder (lower 8 bits)
-	shl ah, 6 
-	or cl,ah ;put upper 2 bits of cylinder in cl
+    push ax
+    push dx
 
-	pop ax
-	mov dl, al
-	pop ax
-	ret
+    xor dx, dx                          ; dx = 0
+    div word [bdb_sectors_per_track]    ; ax = LBA / SectorsPerTrack
+                                        ; dx = LBA % SectorsPerTrack
+
+    inc dx                              ; dx = (LBA % SectorsPerTrack + 1) = sector
+    mov cx, dx                          ; cx = sector
+
+    xor dx, dx                          ; dx = 0
+    div word [bdb_heads]                ; ax = (LBA / SectorsPerTrack) / Heads = cylinder
+                                        ; dx = (LBA / SectorsPerTrack) % Heads = head
+    mov dh, dl                          ; dh = head
+    mov ch, al                          ; ch = cylinder (lower 8 bits)
+    shl ah, 6
+    or cl, ah                           ; put upper 2 bits of cylinder in CL
+
+    pop ax
+    mov dl, al                          ; restore DL
+    pop ax
+    ret
 
 
 ;
-;reads form a disk
+; Reads sectors from a disk
+; Parameters:
+;   - ax: LBA address
+;   - cl: number of sectors to read (up to 128)
+;   - dl: drive number
+;   - es:bx: memory address where to store read data
 ;
-; parameters:
-; ax: lba address
-; cl: number of sectors to read up to 128
-; dl: drive number
-; es:bx memory address where to store read data
-
 disk_read:
-	push ax ;save registers we will modify
-	push bx
-	push cx
-	push di
 
-	push cx ; temp save cl number of secotrs to read
-	call lba_to_chs
-	pop ax
-	
-	mov ah, 02h
-	mov di, 3
+    push ax                             ; save registers we will modify
+    push bx
+    push cx
+    push dx
+    push di
 
-; in real life need to loop 3 times cus floppys are ass
+    push cx                             ; temporarily save CL (number of sectors to read)
+    call lba_to_chs                     ; compute CHS
+    pop ax                              ; AL = number of sectors to read
+    
+    mov ah, 02h
+    mov di, 3                           ; retry count
 
 .retry:
-	pusha ; save all regs we dont know what bios modifies
-	stc ;set carry flag some bios dont set it 
-	int 13h ; carry flag cleared = success
-	jnc .done ; jump if carry not set 
+    pusha                               ; save all registers, we don't know what bios modifies
+    stc                                 ; set carry flag, some BIOS'es don't set it
+    int 13h                             ; carry flag cleared = success
+    jnc .done                           ; jump if carry not set
 
-	;read failed
-	popa
-	call disk_reset
+    ; read failed
+    popa
+    call disk_reset
 
-	dec di
-	test di,di
-	jnz .retry
+    dec di
+    test di, di
+    jnz .retry
 
 .fail:
-	; all attempsts failes
-	jmp floppy_error
+    ; all attempts are exhausted
+    jmp floppy_error
 
 .done:
-	popa
+    popa
 
-	pop di ;restoe registers we will modify
-	pop dx
-	pop cx
-	pop bx
-	pop ax
-	ret 
+    pop di
+    pop dx
+    pop cx
+    pop bx
+    pop ax                             ; restore registers modified
+    ret
+
 
 ;
-;resets disk controller
-;parametersL
-;	dl :drive number
+; Resets disk controller
+; Parameters:
+;   dl: drive number
 ;
 disk_reset:
-	pusha
-	mov ah, 0
-	stc
-	int 13h
-	jc floppy_error
-	popa
-	ret
-
-	
+    pusha
+    mov ah, 0
+    stc
+    int 13h
+    jc floppy_error
+    popa
+    ret
 
 
+msg_hello:              db 'Hello world!', ENDL, 0
+msg_read_failed:        db 'Read from disk failed!', ENDL, 0
 
-
-
-
-
-msg_hello: db  'Hello World!',ENDL,0
-msg_read_failed: db 'Read from disk failed!', ENDL, 0
 times 510-($-$$) db 0
 dw 0AA55h
