@@ -1,4 +1,4 @@
-org 0x7c00 ;this is the address where the bios puts the os 
+org 0x0;this is the address where the bios puts the os 
 ;Directive give a clue to the assembler that will affect how the program gets compiled
 ;instruction translated to machine code that the cpu will execute
 bits 16 ; emit 16bit code so it can be backwards compatible start on 16 bit and can move up to 64
@@ -17,7 +17,17 @@ bits 16 ; emit 16bit code so it can be backwards compatible start on 16 bit and 
 %define ENDL 0x0D,0x0A ;setting macro for endline 
 
 start:
-	jmp main ;since func above main we need to jump to main
+
+	;print message
+	mov si,msg_hello
+	call puts
+	
+	
+	
+.halt:
+	cli 
+	hlt
+
 
 ;prints a string to the screen
 ; Params:
@@ -51,26 +61,5 @@ puts:
 
 
 
-main:
-
-	;setup data segments
-	mov ax, 0
-	mov ds, ax
-	mov es,ax
-
-	;setup stack
-	mov ss, ax
-	mov sp, 0x7c00 ;stack grows downwards in memory fifo push pop sp=stackpointe
-
-
-	;print message
-	mov si,msg_hello
-	call puts
-	
-	hlt
-.halt:
-	JMP .halt ;so that we dont hit infinite loop 
-
 msg_hello: db  'Hello World!',ENDL,0
-times 510-($-$$) db 0
-dw 0AA55h
+
