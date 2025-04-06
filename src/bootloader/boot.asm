@@ -18,11 +18,11 @@ bits 16 ; emit 16bit code so it can be backwards compatible start on 16 bit and 
 
 
 
-#
-# FAT12 header
-#
+;
+; FAT12 header
+;
 jmp short start
-no op
+nop
 
 bdb_oem:	db 'MSWIN4.1' ;8 bytes
 bdb_bytes_per_sector: dw 512
@@ -37,7 +37,7 @@ bdb_heads: 	dw 2
 bdb_hidden_sectors: dd 0
 bdb_large_sector_count: dd 0
 
-# extended boot sector
+; extended boot sector
 ebr_drive_number: 	db 0
 					db 0 ;reserved
 ebr_signature: 		db 29h 

@@ -7,6 +7,7 @@ This is a work in progress simple OS
 - nasm assembler
 - QEMU 
 - MAKE
+- mtools
 
 # Currently working on the bootloader
 - Uses floppy disk as bootloader
