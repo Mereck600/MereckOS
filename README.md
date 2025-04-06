@@ -9,6 +9,7 @@ This is a work in progress simple OS
 - MAKE
 - mtools
 - bochs
+- C compiler: openWatcom
 
 # Currently working on the bootloader
 - Uses floppy disk as bootloader
