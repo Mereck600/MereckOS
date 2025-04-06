@@ -32,12 +32,12 @@ puts:
 	lodsb 		 ;loads the next character in al
 	or al,al ;verify if next char is null 
 	jz .done
-	jmp .loop
+	
 
 	mov ah,0x0e
 	mov bh,0
 	int 0x10
-		
+	jmp .loop	
 ; interupts are a signal wich makes the processor stop to handle sig
 ; can be triggerd by exception
 ; or hardware
@@ -72,4 +72,5 @@ main:
 	JMP .halt ;so that we dont hit infinite loop 
 
 msg_hello: db  'Hello World!',ENDL,0
+times 510-($-$$) db 0
 dw 0AA55h
