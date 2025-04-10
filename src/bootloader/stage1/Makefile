@@ -1,7 +1,7 @@
 BUILD_DIR?=build/
 ASM?=nasm
-CC16?=/usr/bin/watcom/bin1/wcc
-LD16?=/usr/bin/watcom/bin1/wlink
+CC16?=/usr/bin/watcom/binl64/wcc
+LD16?=/usr/bin/watcom/binl64/wlink
 
 .PHONY: all clean
 
