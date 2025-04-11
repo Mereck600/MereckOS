@@ -8,7 +8,7 @@ typedef uint8_t bool;
 #define true 1
 #define false 0
 typedef struct{
-    uint8_t BOootJumpInstruction[3];
+    uint8_t BootJumpInstruction[3];
     uint8_t OemIdentifier[8];
     uint16_t BytesPerSector;
     uint8_t SectorsPerCluster;

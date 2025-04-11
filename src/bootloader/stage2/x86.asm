@@ -13,7 +13,7 @@ section _TEXT class=CODE
 ;args: character, page
 ;
 
-global x86_Video_WriteCharTeletype
+global _x86_Video_WriteCharTeletype
 _x86_Video_WriteCharTeletype:
     ; make nrew cal frame
     push bp ;save old call fram
@@ -22,14 +22,14 @@ _x86_Video_WriteCharTeletype:
     ;save bx
     push bx
 
-
-    ;[bp+0] - return address (small memory model => 2bytes)
-    ; [bp+2] - first argument (character) bytes are converted to words(cant push a single byte onto stack)
-    ; [bp+4] - second argumet (page)
+    ; [bp+0] - old call frame
+    ;[bp+2] - return address (small memory model => 2bytes)
+    ; [bp+4] - first argument (character) bytes are converted to words(cant push a single byte onto stack)
+    ; [bp+6] - second argumet (page)
     ; again note bytes are converted to words (cant push a byte)
     mov ah,0Eh
-    mov al, [bp+2]
-    mov bh, [bp+4]
+    mov al, [bp+4]
+    mov bh, [bp+6]
 
     int 10h
     ; restore bx
